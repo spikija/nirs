@@ -1,0 +1,41 @@
+---
+title: "NIRS_rev1"
+author: "Slaven Pikija"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+## Results
+
+Among `r n_total` patients, rSO₂ was lower on the affected side in
+`r n_unaff_higher` (`r sprintf("%.1f", pct_unaff_higher)`%),
+similar between hemispheres in `r n_equal`
+(`r sprintf("%.1f", pct_equal)`%), and higher on the affected side in
+`r n_aff_higher` (`r sprintf("%.1f", pct_aff_higher)`%).
+
+The distribution across the three categories differed significantly from an equal distribution
+(χ² = `r sprintf("%.2f", unname(chi_test$statistic))`,
+df = `r unname(chi_test$parameter)`,
+p < `r format.pval(chi_test$p.value, digits = 3, eps = 0.001)`).
+
+Among the `r n_determinate` patients with a directional interhemispheric
+difference, the hemisphere with lower rSO₂ correctly corresponded to the
+angiographically affected hemisphere in `r n_unaff_higher`
+(`r sprintf("%.1f", ident_accuracy)`%;
+95% CI `r sprintf("%.1f", ident_ci_low)`–`r sprintf("%.1f", ident_ci_high)`%;
+exact binomial p = `r format.pval(binom_test$p.value, digits = 3, eps = 0.001)`).
+
+## Figure
+
+```{r affected-hemisphere-dotplot, echo=FALSE, fig.width=5, fig.height=8, dpi=300}
+fig1
+```
+
+Supplemental Figure xx.
+Interhemispheric difference in mean regional cerebral oxygen saturation (rSO₂) during the prespecified 10-minute analysis period. ΔrSO₂ was calculated as affected minus unaffected hemisphere. The shaded area indicates the prespecified range considered similar between hemispheres (−4 to +4 percentage points). Positive values indicate higher rSO₂ on the affected side, and negative values indicate higher rSO₂ on the unaffected side. N=170.
