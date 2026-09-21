@@ -9,7 +9,14 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Methods
+### Analysis of temporal rSO₂ changes around reperfusion
+
+To assess individual changes in cerebral oxygenation around reperfusion, the analysis was restricted to patients with meaningful angiographic recanalisation and available paired NIRS measurements (N = 157). For each hemisphere, mean regional cerebral oxygen saturation (rSO₂) was calculated over the prespecified 10-minute periods before and after angiographic reperfusion/final mechanical thrombectomy attempt.
+
+Within-patient pre- and post-reperfusion rSO₂ values were compared separately for the affected and unaffected hemispheres using paired Wilcoxon signed-rank tests. Individual paired measurements were displayed graphically to assess the consistency and heterogeneity of patient-level responses.
+
+To directly compare temporal changes between hemispheres, a patient-level change score was calculated for each hemisphere as ΔrSO₂ = post-reperfusion rSO₂ − pre-reperfusion rSO₂. The affected- and unaffected-hemisphere change scores were subsequently compared within patients using a paired Wilcoxon signed-rank test. Results are reported as medians with interquartile ranges (IQRs). The Hodges–Lehmann estimate of the paired between-hemisphere difference in change is reported with its 95% confidence interval. All differences in rSO₂ are expressed in percentage points.
 
 ## Results
 
@@ -17,7 +24,7 @@ Among `r n_total` patients, rSO₂ was lower on the affected side in
 `r n_unaff_higher` (`r sprintf("%.1f", pct_unaff_higher)`%),
 similar between hemispheres in `r n_equal`
 (`r sprintf("%.1f", pct_equal)`%), and higher on the affected side in
-`r n_aff_higher` (`r sprintf("%.1f", pct_aff_higher)`%).
+`r n_aff_higher` (`r sprintf("%.1f", pct_aff_higher)`%). Figure xxx_1.
 
 The distribution across the three categories differed significantly from an equal distribution
 (χ² = `r sprintf("%.2f", unname(chi_test$statistic))`,
@@ -31,11 +38,93 @@ angiographically affected hemisphere in `r n_unaff_higher`
 95% CI `r sprintf("%.1f", ident_ci_low)`–`r sprintf("%.1f", ident_ci_high)`%;
 exact binomial p = `r format.pval(binom_test$p.value, digits = 3, eps = 0.001)`).
 
-## Figure
+Among patients with meaningful recanalisation and complete paired measurements,
+median rSO₂ in the affected hemisphere changed from
+`r sprintf("%.1f", affected_stats$start_median)`%
+(IQR `r sprintf("%.1f", affected_stats$start_q1)`–`r sprintf("%.1f", affected_stats$start_q3)`%)
+at the start of recording to
+`r sprintf("%.1f", affected_stats$post_median)`%
+(IQR `r sprintf("%.1f", affected_stats$post_q1)`–`r sprintf("%.1f", affected_stats$post_q3)`%)
+in the post-intervention period.
 
-```{r affected-hemisphere-dotplot, echo=FALSE, fig.width=5, fig.height=8, dpi=300}
+The Hodges–Lehmann estimate of the paired shift was
+`r sprintf("%.1f", affected_stats$HL_estimate)` percentage points
+(95% CI `r sprintf("%.1f", affected_stats$ci_low)` to
+`r sprintf("%.1f", affected_stats$ci_high)`;
+Wilcoxon signed-rank p `r ifelse(affected_stats$p_value < 0.001,
+"< 0.001",
+paste0("= ", sprintf("%.3f", affected_stats$p_value)))`).
+
+In the unaffected hemisphere, median rSO₂ changed from
+`r sprintf("%.1f", unaffected_stats$start_median)`%
+(IQR `r sprintf("%.1f", unaffected_stats$start_q1)`–`r sprintf("%.1f", unaffected_stats$start_q3)`%)
+to
+`r sprintf("%.1f", unaffected_stats$post_median)`%
+(IQR `r sprintf("%.1f", unaffected_stats$post_q1)`–`r sprintf("%.1f", unaffected_stats$post_q3)`%).
+
+The Hodges–Lehmann estimate of the paired shift was
+`r sprintf("%.1f", unaffected_stats$HL_estimate)` percentage points
+(95% CI `r sprintf("%.1f", unaffected_stats$ci_low)` to
+`r sprintf("%.1f", unaffected_stats$ci_high)`;
+Wilcoxon signed-rank p `r ifelse(unaffected_stats$p_value < 0.001,
+"< 0.001",
+paste0("= ", sprintf("%.3f", unaffected_stats$p_value)))`) (Figure xxx_2).
+
+
+To directly compare the temporal response between hemispheres, patient-level post–pre changes in rSO₂ were calculated for each hemisphere. The median change was
+`r sprintf("%.1f", aff_change_median)` percentage points
+(IQR `r sprintf("%.1f", aff_change_q1)`–`r sprintf("%.1f", aff_change_q3)`)
+in the affected hemisphere and
+`r sprintf("%.1f", unaff_change_median)` percentage points
+(IQR `r sprintf("%.1f", unaff_change_q1)`–`r sprintf("%.1f", unaff_change_q3)`)
+in the unaffected hemisphere.
+
+The Hodges–Lehmann estimate of the paired between-hemisphere difference in change was
+`r sprintf("%.1f", HL_between)` percentage points
+(95% CI `r sprintf("%.1f", CI_between_low)` to `r sprintf("%.1f", CI_between_high)`;
+paired Wilcoxon signed-rank p `r ifelse(p_between < 0.001, "< 0.001", paste0("= ", sprintf("%.3f", p_between)))`).
+The patient-level comparison of temporal changes between hemispheres is shown in Figure xxx_3.
+
+
+### NIRS effect according to collateral and reperfusion status
+
+At the start of the procedure, the median affected–unaffected rSO₂ difference was
+`r sprintf("%.1f", collateral_bad$median)` percentage points
+(IQR `r sprintf("%.1f", collateral_bad$q1)` to `r sprintf("%.1f", collateral_bad$q3)`)
+in patients with poor collaterals
+(n = `r collateral_bad$n`)
+and
+`r sprintf("%.1f", collateral_good$median)` percentage points
+(IQR `r sprintf("%.1f", collateral_good$q1)` to `r sprintf("%.1f", collateral_good$q3)`)
+in patients with good collaterals
+(n = `r collateral_good$n`).
+
+The Hodges–Lehmann estimate of the between-group difference was
+`r sprintf("%.1f", collateral_HL)` percentage points
+(95% CI `r sprintf("%.1f", collateral_CI_low)` to `r sprintf("%.1f", collateral_CI_high)`;
+Wilcoxon rank-sum p
+`r ifelse(collateral_p < 0.001, "< 0.001", paste0("= ", sprintf("%.3f", collateral_p)))`).
+
+
+```{r affected-hemisphere-dotplot, echo=FALSE, fig.width=3.5, fig.height=7, out.width="20%"}
 fig1
 ```
 
-Supplemental Figure xx.
+Supplemental Figure xxx_1.
 Interhemispheric difference in mean regional cerebral oxygen saturation (rSO₂) during the prespecified 10-minute analysis period. ΔrSO₂ was calculated as affected minus unaffected hemisphere. The shaded area indicates the prespecified range considered similar between hemispheres (−4 to +4 percentage points). Positive values indicate higher rSO₂ on the affected side, and negative values indicate higher rSO₂ on the unaffected side. N=170.
+
+```{r fig-prepost-rso2, echo=FALSE, fig.width=9, fig.height=4.8, dpi=300, out.width="50%"}
+fig_prepost
+```
+
+---
+
+Supplemental Figure xxx_2. Mean regional cerebral oxygen saturation (rSO₂) during the prespecified 10-minute averaging periods at the start of recording and after the intervention (5 minute after recanalisation time), shown separately for the affected (A) and unaffected (B) hemisphere. Individual patient trajectories are shown as faint lines, and group means with 95% confidence intervals are overlaid. Only patients with meaningful recanalisation and complete paired measurements for both time points were included (N=157). P values represent within-hemisphere paired comparisons between start and post-intervention values.
+
+
+```{r fig_between_hemi, echo=FALSE, fig.width=2.5, fig.height=4.5, dpi=300, out.width = "20%", dpi=300}
+fig_between_hemi
+```
+
+Supplemental Figure xxx_3. Comparison of post–pre changes in rSO₂ between hemispheres.
+For each patient, the change in mean rSO₂ was calculated as post-reperfusion minus pre-reperfusion rSO₂ separately for the affected and unaffected hemispheres. Individual patient-level changes are shown for both hemispheres; paired observations originate from the same patient. The dashed horizontal line denotes no temporal change. Only patients with meaningful angiographic recanalisation and complete measurements in both hemispheres were included (N = 157). The p value represents the paired Wilcoxon signed-rank comparison of post–pre changes between the affected and unaffected hemispheres.

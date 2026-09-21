@@ -1,0 +1,54 @@
+
+The authors investigate whether NIRS can identify cerebral ischaemia during mechanical thrombectomy and detect reperfusion-related changes. This is an interesting and clinically relevant question. However, I have a major general concern regarding the level of analysis and interpretation.
+As a clinical anaesthesiologist, I need monitoring to provide useful information for the individual patient, not merely an average association in a study population. This is also what the stated aims imply: whether NIRS can “reliably identify the affected hemisphere” and capture recanalization-related changes. These are questions of individual-patient performance, rather than population-level associations.
+However, all current analyses are conducted and reported at the group level. They show average differences between hemispheres or time periods, but do not show whether the lower rSO₂ value identifies the stroke side in the patient in front of us, or whether a meaningful change reliably occurs when reperfusion is achieved. The current analyses therefore cannot support the proposed clinical monitoring application. Please provide patient-level analyses or moderate the aims and conclusions accordingly.
+Specifically:
+1•       Evaluate and display individual affected-hemisphere identification. 
+Report the number and percentage of patients in whom rSO₂ was lower, equal or higher 
+on the affected side. 
+Show the raw affected–unaffected rSO₂ difference for every patient in a dot plot, 
+with zero indicating no asymmetry. 
+In addition, report how often the hemisphere with the lower rSO₂ value correctly 
+corresponded to the angiographically affected hemisphere, including correct, incorrect and 
+indeterminate classifications with 95% CI. 
+Otherwise, remove “reliably identifies” from the aims and conclusions.
+
+2•       Show individual changes around reperfusion. 
+Provide paired dot-and-line plots for every patient, showing rSO₂ before and after 
+angiographic reperfusion/final MT attempt, separately for affected and unaffected hemispheres. 
+This will show whether the average increase reflects a consistent individual response.
+
+3•       Compare temporal changes directly between hemispheres. 
+Calculate patient-level post–pre ΔrSO₂ for both hemispheres and test whether the 
+change differs between sides. Show these paired changes graphically and 
+report the median paired change, IQR and 95% CI. 
+A significant change on one side and a non-significant change on the other does not 
+demonstrate a between-side difference.
+
+4•       Test reperfusion specificity directly. 
+Compare patient-level NIRS changes in patients with successful versus unsuccessful reperfusion. 
+If available, align the analysis to angiographic confirmation of reperfusion rather than 
+merely the final MT attempt.
+
+- i do not think we have enough patients to make meaningful comparison (only 19 patients with 0-2a)
+
+5•       Test subgroup differences directly. 
+For each patient, calculate the relevant NIRS effect 
+(e.g. affected–unaffected difference or post–pre change) 
+and compare this effect between good versus poor collaterals and 
+successful versus unsuccessful reperfusion. 
+Separate subgroup p-values do not demonstrate effect modification.
+
+- again there is no value in comparing successful vs. unsuccessful reperfusion
+
+6•       Address multiplicity. 
+Define a primary analysis and label the remaining temporal and subgroup analyses as 
+exploratory. Avoid basing conclusions on isolated p-values.
+
+•       Make NIRS preprocessing reproducible. Specify objective artefact criteria, 
+the minimum valid data required per window, handling of missing data and sensor displacement, 
+whether reviewers were blinded, and the number of excluded observations.
+
+•       Clarify possible treatment influence. State whether clinicians could see the NIRS display and whether it could have influenced blood-pressure, ventilation or anaesthetic management.
+
+The authors could, of course, address all these issues by explicitly limiting all aims and conclusions to population-level associations. However, this would substantially reduce the clinical usefulness and novelty of the study. Demonstrating a small average difference between groups is not the same as demonstrating that NIRS can function as a clinically useful monitoring tool during MT. If the intended contribution is individualised intraprocedural monitoring, the requested patient-level analyses are needed.
