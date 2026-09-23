@@ -12,31 +12,53 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Methods
 ### Analysis of temporal rSO₂ changes around reperfusion
 
-To assess individual changes in cerebral oxygenation around reperfusion, the analysis was restricted to patients with meaningful angiographic recanalisation and available paired NIRS measurements (N = 157). For each hemisphere, mean regional cerebral oxygen saturation (rSO₂) was calculated over the prespecified 10-minute periods before and after angiographic reperfusion/final mechanical thrombectomy attempt.
+### NIRS data preprocessing
 
-Within-patient pre- and post-reperfusion rSO₂ values were compared separately for the affected and unaffected hemispheres using paired Wilcoxon signed-rank tests. Individual paired measurements were displayed graphically to assess the consistency and heterogeneity of patient-level responses.
+Continuous bilateral rSO₂ measurements were recorded at approximately 6-second intervals. Raw measurements from the left and right frontal sensors were retained separately and ordered according to their original acquisition timestamps. Date and clock time were combined into a single timestamp, and elapsed time was calculated relative to the first available measurement for each patient and hemisphere.
+
+Raw values were retained unchanged for quality-control purposes. Values coded as zero in the source data were treated as invalid measurements and converted to missing values before signal processing. Missing values occurring within short internal signal gaps were reconstructed by linear interpolation using the actual measurement timestamps. Interpolation was restricted to gaps bracketed by valid measurements no more than 30 seconds apart; longer gaps and missing values at the beginning or end of a recording were not interpolated.
+
+For each patient and hemisphere, the number and proportion of zero, missing, and interpolated measurements were quantified. Subsequent analyses were performed using the resulting interpolated rSO₂ series while retaining non-interpolated missing values for intervals in which valid signal recovery was not possible.
+To assess individual changes in cerebral oxygenation around reperfusion, the analysis was restricted to patients with meaningful angiographic recanalisation and available paired NIRS measurements (N = 151). For each hemisphere, median regional cerebral oxygen saturation (rSO₂) was calculated over the prespecified 10-minute periods before and 5 minutes after angiographic reperfusion/final mechanical thrombectomy attempt.
+
+Within-patient pre- and post-reperfusion rSO₂ values were compared separately (4% cut-off values Anuss et al.) for the affected and unaffected hemispheres using paired Wilcoxon signed-rank tests. Individual paired measurements were displayed graphically to assess the consistency and heterogeneity of patient-level responses.
 
 To directly compare temporal changes between hemispheres, a patient-level change score was calculated for each hemisphere as ΔrSO₂ = post-reperfusion rSO₂ − pre-reperfusion rSO₂. The affected- and unaffected-hemisphere change scores were subsequently compared within patients using a paired Wilcoxon signed-rank test. Results are reported as medians with interquartile ranges (IQRs). The Hodges–Lehmann estimate of the paired between-hemisphere difference in change is reported with its 95% confidence interval. All differences in rSO₂ are expressed in percentage points.
 
+Multivariable analysis
+### Multivariable analysis
+
+Multivariable logistic regression analyses were performed to explore whether NIRS-derived rSO₂ measures were independently associated with favorable functional outcome at 3 months, defined as mRS 0–2 versus 3–6. Favorable outcome (mRS 0–2) was coded as the event of interest. In the primary baseline model, NIRS measurements were parameterized as the overall hemispheric rSO₂ level, calculated from the two hemisphere-specific median rSO₂ values, and the absolute interhemispheric rSO₂ difference, representing the magnitude of hemispheric asymmetry irrespective of direction. The model was adjusted for age, admission NIHSS, and successful angiographic reperfusion (mTICI 2b–3). Age, NIHSS, and NIRS-derived measures were entered as continuous variables.
+
+In a sensitivity analysis, the absolute interhemispheric difference was replaced by the categorical direction of baseline asymmetry (affected hemisphere higher, no relevant asymmetry, or unaffected hemisphere higher), using affected hemisphere higher as the reference category.
+
+A separate exploratory model was performed in patients with successful reperfusion (mTICI 2b–3) and available paired NIRS measurements. The differential temporal rSO₂ response between hemispheres was calculated for each patient as [(post-reperfusion − pre-reperfusion)affected − (post-reperfusion − pre-reperfusion)unaffected]. Positive values therefore indicated a relative upward shift in rSO₂ in the affected hemisphere compared with the unaffected hemisphere. Reperfusion status was not included in this model because the analysis was restricted to patients with mTICI 2b–3. Results are reported as odds ratios (ORs) with 95% confidence intervals (CIs).
+
 ## Results
 
-Among `r n_total` patients, rSO₂ was lower on the affected side in
-`r n_unaff_higher` (`r sprintf("%.1f", pct_unaff_higher)`%),
-similar between hemispheres in `r n_equal`
-(`r sprintf("%.1f", pct_equal)`%), and higher on the affected side in
-`r n_aff_higher` (`r sprintf("%.1f", pct_aff_higher)`%). Figure xxx_1.
+Among `r n_total` patients, the hemisphere with lower rSO₂ correctly corresponded to the angiographically affected hemisphere in
+`r n_unaff_higher` patients
+(`r sprintf("%.1f", pct_unaff_higher)`%;
+95% CI `r sprintf("%.1f", correct_ci_low)`–`r sprintf("%.1f", correct_ci_high)`%).
 
-The distribution across the three categories differed significantly from an equal distribution
-(χ² = `r sprintf("%.2f", unname(chi_test$statistic))`,
-df = `r unname(chi_test$parameter)`,
-p < `r format.pval(chi_test$p.value, digits = 3, eps = 0.001)`).
+Classification was incorrect in
+`r n_aff_higher` patients
+(`r sprintf("%.1f", pct_aff_higher)`%;
+95% CI `r sprintf("%.1f", incorrect_ci_low)`–`r sprintf("%.1f", incorrect_ci_high)`%),
 
-Among the `r n_determinate` patients with a directional interhemispheric
-difference, the hemisphere with lower rSO₂ correctly corresponded to the
-angiographically affected hemisphere in `r n_unaff_higher`
+while
+`r n_equal` patients
+(`r sprintf("%.1f", pct_equal)`%;
+95% CI `r sprintf("%.1f", indeterminate_ci_low)`–`r sprintf("%.1f", indeterminate_ci_high)`%)
+were classified as indeterminate because no relevant interhemispheric asymmetry was present.
+
+Among the `r n_determinate` patients with a directional interhemispheric difference, the lower-rSO₂ hemisphere correctly corresponded to the angiographically affected hemisphere in
+`r n_unaff_higher` patients
 (`r sprintf("%.1f", ident_accuracy)`%;
 95% CI `r sprintf("%.1f", ident_ci_low)`–`r sprintf("%.1f", ident_ci_high)`%;
-exact binomial p = `r format.pval(binom_test$p.value, digits = 3, eps = 0.001)`).
+exact binomial p `r ifelse(binom_p < 0.001,
+"< 0.001",
+paste0("= ", sprintf("%.3f", binom_p)))`).
 
 Among patients with meaningful recanalisation and complete paired measurements,
 median rSO₂ in the affected hemisphere changed from
@@ -105,26 +127,38 @@ The Hodges–Lehmann estimate of the between-group difference was
 Wilcoxon rank-sum p
 `r ifelse(collateral_p < 0.001, "< 0.001", paste0("= ", sprintf("%.3f", collateral_p)))`).
 
+Multivarable analysis
+### Multivariable analysis and functional outcome
 
-```{r affected-hemisphere-dotplot, echo=FALSE, fig.width=3.5, fig.height=7, out.width="20%"}
+In the baseline multivariable model, neither overall rSO₂ (OR 0.98 per 1-percentage-point increase, 95% CI 0.93–1.02; p=0.345) nor the absolute interhemispheric rSO₂ difference (OR 0.99 per 1-percentage-point increase, 95% CI 0.93–1.05; p=0.861) was independently associated with favorable 3-month functional outcome. In contrast, increasing age (OR 0.92 per year, 95% CI 0.89–0.95; p<0.001) and higher admission NIHSS (OR 0.79 per point, 95% CI 0.72–0.87; p<0.001) were associated with lower odds of favorable outcome, whereas successful reperfusion was associated with higher odds of favorable outcome (OR 6.49, 95% CI 1.66–33.79; p=0.013).
+
+Results were similar when the direction of baseline interhemispheric asymmetry was considered categorically. Compared with patients with higher rSO₂ in the affected hemisphere, neither absence of a relevant interhemispheric asymmetry (OR 1.60, 95% CI 0.59–4.46; p=0.361) nor higher rSO₂ in the unaffected hemisphere (OR 1.06, 95% CI 0.39–2.95; p=0.912) was associated with functional outcome.
+
+Among patients with successful reperfusion, overall rSO₂ was not independently associated with favorable outcome (OR 0.97 per 1-percentage-point increase, 95% CI 0.92–1.02; p=0.269). A greater relative increase in rSO₂ in the affected compared with the unaffected hemisphere, quantified as the within-patient differential change [(post–pre)affected − (post–pre)unaffected], was associated with higher estimated odds of favorable outcome (OR 1.07 per 1-percentage-point increase, 95% CI 1.00–1.16), although this association did not reach conventional statistical significance (p=0.057). (Supplementary Table X_1).
+
+```{r suppl_table_x_1, echo=FALSE}
+ft_multivariable
+```
+
+```{r affected-hemisphere-dotplot, echo=FALSE, fig.width=3.5, fig.height=7, out.width="40%"}
 fig1
 ```
 
 Supplemental Figure xxx_1.
-Interhemispheric difference in mean regional cerebral oxygen saturation (rSO₂) during the prespecified 10-minute analysis period. ΔrSO₂ was calculated as affected minus unaffected hemisphere. The shaded area indicates the prespecified range considered similar between hemispheres (−4 to +4 percentage points). Positive values indicate higher rSO₂ on the affected side, and negative values indicate higher rSO₂ on the unaffected side. N=170.
+Interhemispheric difference in median regional cerebral oxygen saturation (rSO₂) during the prespecified 10-minute analysis period. ΔrSO₂ was calculated as affected minus unaffected hemisphere. The shaded area indicates the prespecified range considered similar between hemispheres (−4 to +4 percentage points). Positive values indicate higher rSO₂ on the affected side, and negative values indicate higher rSO₂ on the unaffected side. N=170.
 
-```{r fig-prepost-rso2, echo=FALSE, fig.width=9, fig.height=4.8, dpi=300, out.width="50%"}
+```{r fig-prepost-rso2, echo=FALSE, fig.width=9, fig.height=4.8, dpi=300, out.width="40%"}
 fig_prepost
 ```
 
 ---
 
-Supplemental Figure xxx_2. Mean regional cerebral oxygen saturation (rSO₂) during the prespecified 10-minute averaging periods at the start of recording and after the intervention (5 minute after recanalisation time), shown separately for the affected (A) and unaffected (B) hemisphere. Individual patient trajectories are shown as faint lines, and group means with 95% confidence intervals are overlaid. Only patients with meaningful recanalisation and complete paired measurements for both time points were included (N=157). P values represent within-hemisphere paired comparisons between start and post-intervention values.
+Supplemental Figure xxx_2. Median regional cerebral oxygen saturation (rSO₂) during the prespecified 10-minute averaging periods at the start of recording and after the intervention (5 minute after recanalisation time), shown separately for the affected (A) and unaffected (B) hemisphere. Individual patient trajectories are shown as faint lines, and group medians with 95% confidence intervals are overlaid. Only patients with meaningful recanalisation and complete paired measurements for both time points were included (N=157). P values represent within-hemisphere paired comparisons between start and post-intervention values.
 
 
-```{r fig_between_hemi, echo=FALSE, fig.width=2.5, fig.height=4.5, dpi=300, out.width = "20%", dpi=300}
+```{r fig_between_hemi, echo=FALSE, fig.width=2.5, fig.height=4.5, dpi=300, out.width = "40%", dpi=300}
 fig_between_hemi
 ```
 
 Supplemental Figure xxx_3. Comparison of post–pre changes in rSO₂ between hemispheres.
-For each patient, the change in mean rSO₂ was calculated as post-reperfusion minus pre-reperfusion rSO₂ separately for the affected and unaffected hemispheres. Individual patient-level changes are shown for both hemispheres; paired observations originate from the same patient. The dashed horizontal line denotes no temporal change. Only patients with meaningful angiographic recanalisation and complete measurements in both hemispheres were included (N = 157). The p value represents the paired Wilcoxon signed-rank comparison of post–pre changes between the affected and unaffected hemispheres.
+For each patient, the change in median rSO₂ was calculated as post-reperfusion minus pre-reperfusion rSO₂ separately for the affected and unaffected hemispheres. Individual patient-level changes are shown for both hemispheres; paired observations originate from the same patient. The dashed horizontal line denotes no temporal change. Only patients with meaningful angiographic recanalisation and complete measurements in both hemispheres were included (N = 157). The p value represents the paired Wilcoxon signed-rank comparison of post–pre changes between the affected and unaffected hemispheres.

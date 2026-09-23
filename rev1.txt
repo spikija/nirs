@@ -30,7 +30,7 @@ Compare patient-level NIRS changes in patients with successful versus unsuccessf
 If available, align the analysis to angiographic confirmation of reperfusion rather than 
 merely the final MT attempt.
 
-- i do not think we have enough patients to make meaningful comparison (only 19 patients with 0-2a)
+A: i do not think we have enough patients to make meaningful comparison (only 19 patients with 0-2a)
 
 5•       Test subgroup differences directly. 
 For each patient, calculate the relevant NIRS effect 
@@ -49,6 +49,7 @@ exploratory. Avoid basing conclusions on isolated p-values.
 the minimum valid data required per window, handling of missing data and sensor displacement, 
 whether reviewers were blinded, and the number of excluded observations.
 
-•       Clarify possible treatment influence. State whether clinicians could see the NIRS display and whether it could have influenced blood-pressure, ventilation or anaesthetic management.
+7•       Clarify possible treatment influence. State whether clinicians could see the NIRS display and whether it could have influenced blood-pressure, ventilation or anaesthetic management.
+A: the NIRS data were visible, treatment decisions could have been influenced based on NIRS data.
 
 The authors could, of course, address all these issues by explicitly limiting all aims and conclusions to population-level associations. However, this would substantially reduce the clinical usefulness and novelty of the study. Demonstrating a small average difference between groups is not the same as demonstrating that NIRS can function as a clinically useful monitoring tool during MT. If the intended contribution is individualised intraprocedural monitoring, the requested patient-level analyses are needed.

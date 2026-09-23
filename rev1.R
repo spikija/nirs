@@ -1,6 +1,5 @@
-# analysis of nirs cohort per Collette 2022
-# LIBRARIES
-# ----
+# analysis Revision 1
+# LIBRARIES ----
 pacman::p_load(
   ggplot2,
   readxl,
@@ -37,16 +36,13 @@ pacman::p_load(
   pROC,
   patchwork
 )
-# ----
-# LIBRARIES ENDE
+# LIBRARIES ENDE----
 
 
 # call usual functions
 db.source.file.path <- ifelse(Sys.info()[[4]] == "LAPTOP-NFRMGQDO" | Sys.info()[[4]] == "NEURONODE", "c:/sci/cdk.stat/", "C:/app/r.apps/cdk.stat/")
 source(paste0(db.source.file.path, "sp.utilities.r"))
 source(paste0(db.source.file.path, "nirs_helper.r"))
-
-# ----
 
 db.language <- ifelse(Sys.info()[[4]] == "LAPTOP-NFRMGQDO" | Sys.info()[[4]] == "NEURONODE", "Meine Ablage", "My Drive")
 db.path <- paste0("C:/sci/rcode/nirs/")
@@ -104,9 +100,11 @@ recan_delay <- 5
 # avg_post - average of raw rSO2 values 5 minutes after recanalisation
 # for sample_duration in seconds
 
+# QUESTION 1----
 avg_start <- db_msr %>% group_by(patient_id, hemisphere_status) %>% 
   filter(elapsed_seconds >= 60*init_delay & elapsed_seconds <= 60*(init_delay+sample_duration)) %>% 
-  summarise(avg = mean(nirs_value_raw, na.rm = TRUE)) %>% 
+  #summarise(avg = mean(nirs_value_raw, na.rm = TRUE)) %>% 
+  summarise(avg = median(nirs_value_raw, na.rm = TRUE)) %>% 
   pivot_wider(names_from = hemisphere_status, values_from = avg) %>% 
   # detect 4% difference
   mutate(
@@ -120,9 +118,15 @@ avg_start <- db_msr %>% group_by(patient_id, hemisphere_status) %>%
 
 avg_start
 
-# ------------------------------------------------------------------
-# Affected-hemisphere identification
-# ------------------------------------------------------------------
+# median across entire brain at the baseline (preparing for multivariable analysis)
+avg_overall <- db_msr %>% group_by(patient_id) %>% 
+  filter(elapsed_seconds >= 60*init_delay & elapsed_seconds <= 60*(init_delay+sample_duration)) %>% 
+  summarise(rso2_med = median(nirs_value_raw, na.rm = TRUE)) 
+avg_overall <- inner_join(avg_overall, avg_start |> dplyr::select(patient_id, difference, ratio_signif), 
+by="patient_id") 
+mavg_overall$difference <- abs(avg_overall$difference)
+
+# Affected-hemisphere identification----
 
 tb1 <- table(avg_start$ratio_signif)
 
@@ -137,26 +141,51 @@ pct_aff_higher   <- 100 * n_aff_higher / n_total
 pct_equal        <- 100 * n_equal / n_total
 pct_unaff_higher <- 100 * n_unaff_higher / n_total
 
-# Overall 3-category distribution
-chi_test <- chisq.test(tb1)
+
+# Exact 95% CI for each classification in the full cohort
+
+ci_correct <- binom.test(
+  x = n_unaff_higher,
+  n = n_total
+)
+
+ci_incorrect <- binom.test(
+  x = n_aff_higher,
+  n = n_total
+)
+
+ci_indeterminate <- binom.test(
+  x = n_equal,
+  n = n_total
+)
+
+correct_ci_low  <- 100 * ci_correct$conf.int[1]
+correct_ci_high <- 100 * ci_correct$conf.int[2]
+
+incorrect_ci_low  <- 100 * ci_incorrect$conf.int[1]
+incorrect_ci_high <- 100 * ci_incorrect$conf.int[2]
+
+indeterminate_ci_low  <- 100 * ci_indeterminate$conf.int[1]
+indeterminate_ci_high <- 100 * ci_indeterminate$conf.int[2]
+
 
 # Among patients with directional asymmetry:
 # lower rSO2 correctly identifies affected hemisphere
+
+n_determinate <- n_unaff_higher + n_aff_higher
+
 binom_test <- binom.test(
-  x = n_unaff_higher,                     # correct
-  n = n_unaff_higher + n_aff_higher,      # determinate cases
+  x = n_unaff_higher,
+  n = n_determinate,
   p = 0.5
 )
-
-# Useful values for RMarkdown
-n_determinate <- n_unaff_higher + n_aff_higher
 
 ident_accuracy <- 100 * unname(binom_test$estimate)
 ident_ci_low   <- 100 * binom_test$conf.int[1]
 ident_ci_high  <- 100 * binom_test$conf.int[2]
 
-chi_p   <- chi_test$p.value
 binom_p <- binom_test$p.value
+
 # so with these tests we have answered at least one question:
 
 # the frequency of affected hemisphere having lower rSO2 is significant
@@ -165,14 +194,14 @@ binom_p <- binom_test$p.value
 # producing dot plot
 # graph will show differences between hemispheres in the 5 minute window 10 minutes
 # after procedure start
-# ----
+
 # proof of concept
 fig1 <- avg_start %>% 
   ggplot(aes(x = 0, y = difference)) + 
   geom_dotplot(binwidth = 0.5, dotsize = 1.5, binaxis = "y", stackdir = "center") 
 fig1 
 
-# production graph
+# production graph ----
 # horizontal layout positions
 x_dot  <- -0.75
 x_text <-  -0.35
@@ -290,13 +319,21 @@ fig1 <- avg_start %>%
   )
 
 fig1
-# ----
 # Block for Q1
 
 
 # Q2 : 
 
-avg_2 <- db_msr %>% group_by(patient_id, elapsed_seconds) %>% 
+# include only 2b-3 recanalisations
+
+avg_2 <- db_msr |>
+  semi_join(
+    db_clin |>
+      filter(tici_grp == "2b-3") |>
+      dplyr::select(patient_id),
+    by = "patient_id"
+  ) |> 
+  group_by(patient_id, elapsed_seconds) %>% 
   filter(recanalisation_point == TRUE) %>% dplyr::select(elapsed_seconds) %>% 
   mutate(start_value = elapsed_seconds + (60*(recan_delay)), 
          upper_value = elapsed_seconds + (60*(recan_delay + sample_duration)))
@@ -310,7 +347,8 @@ calc_avg <- function(db, db_search) {
   db_row <- db %>% group_by(patient_id, hemisphere_status) %>% 
     filter(elapsed_seconds >= db_search$elapsed_seconds & elapsed_seconds <= 
              db_search$upper_value) %>% 
-     summarise(avg = mean(nirs_value_raw, na.rm = TRUE)) %>% 
+     #summarise(avg = mean(nirs_value_raw, na.rm = TRUE)) %>% 
+    summarise(avg = median(nirs_value_raw, na.rm = TRUE)) %>% 
      pivot_wider(names_from = hemisphere_status, values_from = avg) %>% 
      # detect 4% difference
      mutate(
@@ -355,15 +393,15 @@ avg_graph_pivot$period <- factor(avg_graph_pivot$period, c("start", "post"))
 
 str(avg_graph_pivot)
 
-# RESULTS
+# RESULTS----
 
-# ------------------------------------------------------------
+# *************************
 # Paired start vs post analysis
-# ------------------------------------------------------------
+# *************************
 
-# ------------------------------------------------------------
+# *************************
 # Prepare paired start/post data
-# ------------------------------------------------------------
+# *************************
 
 prepost_wide <- avg_graph_pivot |>
   dplyr::select(patient_id, hemisphere, period, avg_10min_rSO2) |>
@@ -376,9 +414,9 @@ prepost_wide <- avg_graph_pivot |>
     change = post - start
   )
 
-# ------------------------------------------------------------
+# *************************
 # Wilcoxon signed-rank test + Hodges-Lehmann estimate
-# ------------------------------------------------------------
+# *************************
 
 wilcox_results <- prepost_wide |>
   group_by(hemisphere) |>
@@ -438,11 +476,10 @@ fig2_affected <- avg_graph_pivot |> filter(hemisphere=="Affected") |>
 fig2_affected
 
 # figure for paper
-# Figure 2, 2 panels, affected and unaffected hemisphere
-# ----
-# ------------------------------------------------------------------
+# Figure 2, 2 panels, affected and unaffected hemisphere----
+# *******************************
 # Data prep
-# ------------------------------------------------------------------
+# *******************************
 plot_df <- avg_graph_pivot %>%
   mutate(
     period = factor(period, levels = c("start", "post")),
@@ -453,11 +490,11 @@ plot_df <- avg_graph_pivot %>%
   filter(all(c("start", "post") %in% period)) %>%
   ungroup()
 
-# ------------------------------------------------------------------
+# *******************************
 # Paired p values per hemisphere
 # Use Wilcoxon signed-rank test (robust choice for paired clinical data).
 # If you prefer paired t-test, replace wilcox.test with t.test.
-# ------------------------------------------------------------------
+# *******************************
 pval_df <- plot_df %>%
   dplyr::select(patient_id, hemisphere, period, avg_10min_rSO2) %>%
   pivot_wider(names_from = period, values_from = avg_10min_rSO2) %>%
@@ -483,9 +520,9 @@ plot_df <- plot_df %>%
     period = factor(period, levels = c("start", "post"))
   )
 
-# ------------------------------------------------------------
+# *************************
 # Panel A: affected hemisphere
-# ------------------------------------------------------------
+# *************************
 pA <- plot_df %>%
   filter(hemisphere == "Affected") %>%
   ggplot(
@@ -564,9 +601,9 @@ pA <- plot_df %>%
   )
 
 pA
-# ------------------------------------------------------------
+# *************************
 # Panel B: unaffected hemisphere
-# ------------------------------------------------------------
+# *************************
 pB <- plot_df %>%
   filter(hemisphere == "Unaffected") %>%
   ggplot(
@@ -645,18 +682,17 @@ pB <- plot_df %>%
   )
 
 
-# ------------------------------------------------------------
+# *************************
 # Combine
-# ------------------------------------------------------------
+# *************************
 fig_prepost <- pA + pB +
   plot_layout(ncol = 2)
 
 fig_prepost
-# ----
-# END FIGURE pre-post
+# END FIGURE pre-post ----
 
 
-# DIFERENCE in DIFFERENCE (Reviewer request 3)
+# DIFERENCE in DIFFERENCE (Reviewer request 3)----
 change_between_hemispheres <- avg_graph_pivot |>
   dplyr::select(
     patient_id,
@@ -704,7 +740,7 @@ change_between_hemispheres <- avg_graph_pivot |>
     delta_delta = Affected - Unaffected
   )
 
-change_between_hemispheres
+m
 # Between-hemisphere change comparison
 n_change <- nrow(change_between_hemispheres)
 
@@ -881,21 +917,21 @@ fig_between_hemi <- ggplot(
 fig_between_hemi
 
 
-# REVIEWER Request 5
-# ----
-# ============================================================
+# REVIEWER Request 5----
+
+# **********************************
 # Reviewer analysis:
 # Does the patient-level NIRS effect differ by
 # (1) collateral status and
 # (2) meaningful reperfusion status?
 #
 # NIRS effect = affected - unaffected mean rSO2 at procedure start
-# ============================================================
+# **********************************
 
 
-# ------------------------------------------------------------
+# *************************
 # 1. Prepare start-of-procedure NIRS effect
-# ------------------------------------------------------------
+# *************************
 
 nirs_start_effect <- avg_start |>
   ungroup() |>
@@ -905,9 +941,9 @@ nirs_start_effect <- avg_start |>
   )
 
 
-# ============================================================
+# **********************************
 # A. COLLATERAL STATUS
-# ============================================================
+# **********************************
 
 collateral_df <- nirs_start_effect |>
   inner_join(
@@ -965,9 +1001,9 @@ collateral_good <- collateral_summary |>
 
 
 
-# ============================================================
+# **********************************
 # FORMATTED P-VALUES
-# ============================================================
+# **********************************
 
 collateral_p_txt <- ifelse(
   collateral_p < 0.001,
@@ -976,11 +1012,164 @@ collateral_p_txt <- ifelse(
 )
 
 
-#----
 # request 4 end
 
-# RENDER
-# ----
+
+# MULTIARIABLE ANALYSIS ----
+# join db_clin and db_overall
+
+db_stat <- inner_join(db_clin |> dplyr::select(patient_id, nihss_bei_aufnahme_nur_summe, 
+                                               alter,tici_grp, mRS_3mo_grp), avg_overall, by="patient_id")
+# this is for change in hemispheres
+db_stat_delta_delta <- inner_join(db_stat, change_between_hemispheres[,c("patient_id", "delta_delta")], by="patient_id")
+
+df <- db_stat %>% 
+  mutate(
+    # Outcome: mRS 0-2 vs 3-6
+    outcome = factor(mRS_3mo_grp, levels = c("0–2", "3–6")),
+    favorable_outcome = as.integer(outcome=="0–2"),
+    
+    # Covariates
+    nihss_adm = nihss_bei_aufnahme_nur_summe, #case_when(nihss_cat == "0–6" | nihss_cat == "7–15" ~ "0-15", TRUE ~ "16+"),
+    tici_grp  = factor(tici_grp),               # categorical
+    age = alter
+    
+  )
+
+df_delta_delta <- 
+  db_stat_delta_delta %>% 
+  mutate(
+    # Outcome: mRS 0-2 vs 3-6
+    outcome = factor(mRS_3mo_grp, levels = c("0–2", "3–6")),
+    favorable_outcome = as.integer(outcome=="0–2"),
+    
+    # Covariates
+    nihss_adm = nihss_bei_aufnahme_nur_summe, #case_when(nihss_cat == "0–6" | nihss_cat == "7–15" ~ "0-15", TRUE ~ "16+"),
+    tici_grp  = factor(tici_grp),               # categorical
+    age = alter
+    
+  )
+
+# Helper: function to fit model + produce OR table
+fit_logit_report <- function(data, formula) {
+  m <- glm(formula, data = data, family = binomial())
+  
+  # Odds ratios with 95% CI
+  or_tbl <- broom::tidy(m, conf.int = TRUE, exponentiate = TRUE) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 3)))
+  
+  list(
+    model = m,
+    OR_table = or_tbl,
+    vif = tryCatch(car::vif(m), error = function(e) NA),
+    pseudoR2 = tryCatch(pscl::pR2(m), error = function(e) NA)
+  )
+}
+
+# Refit Model A1 mRS 0–2 vs 3–6∼age+NIHSS+mTICI+overall rSO₂ level+∣affected−unaffected rSO₂∣
+df_A1 <- df %>% dplyr::select(favorable_outcome, age, nihss_adm, tici_grp, rso2_med, difference) %>% na.omit()
+res_A1_simpl <- fit_logit_report(df_A1, favorable_outcome ~ rso2_med + difference + age + nihss_adm + tici_grp)
+
+# Refit Model A2 instead of asymmetry use direction ratio_signif
+df_A2 <- df %>% dplyr::select(favorable_outcome, age, nihss_adm, tici_grp, rso2_med, ratio_signif) %>% na.omit()
+res_A2_simpl <- fit_logit_report(df_A2, favorable_outcome ~ rso2_med + ratio_signif + age + nihss_adm + tici_grp)
+
+# Refit Model A3 delta-delta on 151 patients (only tici grp 3)
+df_A3 <- df_delta_delta %>% dplyr::select(favorable_outcome, age, nihss_adm, rso2_med, delta_delta) %>% na.omit()
+res_A3_simpl <- fit_logit_report(df_A3, favorable_outcome ~ age + nihss_adm + rso2_med + delta_delta)
+
+
+res_A1_simpl$OR_table
+res_A1_simpl$vif
+res_A1_simpl$pseudoR2
+
+res_A2_simpl$OR_table
+res_A2_simpl$vif
+res_A2_simpl$pseudoR2
+
+res_A3_simpl$OR_table
+res_A3_simpl$vif
+res_A3_simpl$pseudoR2
+
+format_or_table <- function(tbl, model_label) {
+  tbl %>%
+    transmute(
+      Model = model_label,
+      Variable = term,
+      `OR (95% CI)` = sprintf(
+        "%.2f (%.2f–%.2f)",
+        estimate, conf.low, conf.high
+      ),
+      `p value` = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+    )
+}
+
+tbl_A1 <- format_or_table(res_A1_simpl$OR_table, "Baseline overall oxygenation and abs interhemispheric difference")
+tbl_A2 <- format_or_table(res_A2_simpl$OR_table, "Baseline interhemispheric difference direction")
+tbl_A3 <- format_or_table(res_A3_simpl$OR_table, "Intrahemispheric difference in recanalised population (start-post)")
+
+tbl_all <- bind_rows(tbl_A1, tbl_A2, tbl_A3)
+
+label_map <- c(
+  "(Intercept)" = "Intercept",
+  
+  # Common covariates
+  "age" = "Age, per year",
+  "nihss_adm" = "Admission NIHSS, per point",
+  "rso2_med" = "Overall rSO₂, per 1%-point",
+  "tici_grp2b-3" = "Successful reperfusion (TICI 2b–3)",
+  "ratio_signif" = "Direction of interhemispheric difference",
+  
+  # Model A1
+  "difference" = "Absolute interhemispheric rSO₂ difference, per 1%-point",
+  
+  # Model A2
+  "ratio_signifAffected higher" = "Affected hemisphere higher",
+  "ratio_signifUnaffected higher" = "Unaffected hemisphere higher",
+  
+  # Model A3
+  "delta_delta" = "Change in interhemispheric rSO₂ difference, per 1%-point"
+)
+
+tbl_all <- tbl_all %>%
+  mutate(
+    Variable = dplyr::recode(Variable, !!!label_map)
+  )
+
+ft_multivariable <- flextable(tbl_all) %>%
+  set_header_labels(
+    Model = "",
+    Variable = "Variable",
+    `OR (95% CI)` = "Odds ratio (95% CI)",
+    `p value` = "p value"
+  ) %>%
+  merge_v(j = "Model") %>%
+  valign(j = "Model", valign = "top") %>%
+  autofit() %>%
+  align(j = c("OR (95% CI)", "p value"), align = "center") %>%
+  bold(part = "header") %>%
+  fontsize(size = 9, part = "all") %>%
+  set_caption(
+    caption = "Supplemental Table X. Multivariable logistic regression models evaluating associations of baseline NIRS-derived rSO₂ measures and peri-procedural changes in rSO₂ with 3-month functional outcome (mRS 0–2 vs 3–6)."
+  )
+
+library(officer)
+
+doc <- read_docx() %>%
+  body_add_flextable(ft)
+
+print(doc, target = "Supplemental_Table_Multivariable_NIRS.docx")
+
+
+
+# Multivariable analysis END----
+
+
+
+
+
+# RENDER----
+
 # render our statistics
 rmarkdown::render(
   "c:/sci/rcode/nirs/nirs_rev1.Rmd",
@@ -988,7 +1177,6 @@ rmarkdown::render(
   envir = globalenv()
 )
 
-# ----
 # END RENDER
 
 
