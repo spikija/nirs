@@ -49,10 +49,10 @@ db.path <- paste0("C:/sci/rcode/nirs/")
 
 # DBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDB
 # LAST STABLE DB
-db_clin <- read.csv2(paste0(db.path, "clinical_170_clean_v1.csv"))
+db_clin <- read.csv2(paste0(db.path, "clinical_nirs_24092026_3.csv"))
 
 # load main database
-db_msr <- read.csv2(paste0(db.path, "nirs_measurements_clean_v2.csv"))
+db_msr <- read.csv2(paste0(db.path, "nirs_24092026_1.csv"))
 
 # methodology from Hametner et al. 2015:
 # We calculated interhemispheric rSO2 differences before and after the intervention as the difference in the
@@ -124,7 +124,7 @@ avg_overall <- db_msr %>% group_by(patient_id) %>%
   summarise(rso2_med = median(nirs_value_raw, na.rm = TRUE)) 
 avg_overall <- inner_join(avg_overall, avg_start |> dplyr::select(patient_id, difference, ratio_signif), 
 by="patient_id") 
-mavg_overall$difference <- abs(avg_overall$difference)
+avg_overall$difference <- abs(avg_overall$difference)
 
 # Affected-hemisphere identification----
 
@@ -740,7 +740,7 @@ change_between_hemispheres <- avg_graph_pivot |>
     delta_delta = Affected - Unaffected
   )
 
-m
+
 # Between-hemisphere change comparison
 n_change <- nrow(change_between_hemispheres)
 
@@ -1179,97 +1179,817 @@ rmarkdown::render(
 
 # END RENDER
 
+# FLOW CHART GRAPH----
+# SECTION 1
+# patient flow chart
+# prepare data for rmarkdown
+flowChartData <- list()
+
+#orig_db <- read.csv2(paste0(db.path, "db_total_cleaned_11022026.csv2"))
 
 
+orig_db <- read.delim(
+  paste0(db.path, "db_total_cleaned_11022026.csv2"),
+  sep = "\t",
+  header = TRUE,
+  stringsAsFactors = FALSE
+) |> 
+  as_tibble()
+
+flowChartData$total_patients <- nrow(orig_db) + 30 # 30 due to newly added patients after Zensus with ArchiMed (04.02.2026)
+#flowChartData$non_anteriors <- as.numeric(orig_db %>% filter(side == "other") %>% summarise(n = n()))
+flowChartData$non_anteriors <- as.numeric(orig_db %>% filter(!vessel_type_angio %in% c("ACI Occlusion", "M1", "M2")) %>% summarise(n = n()))
+db_fc <- read_excel(paste0(db.path, "patient_flow_chart_03012026.xlsx"))
+# db <- right_join(db, db_fc[db_fc$status == "merge",], by="patient_id")
+flowChartData$nirs_data <- nrow(db_fc)
 
 
+f_rows <- paste0( "<TR>", "<TD ALIGN='LEFT'>", esc(names(other_tab)), "</TD>", "<TD ALIGN='RIGHT'><B>", as.integer(other_tab), "</B></TD>", "</TR>", collapse = "" )
 
-
-tb2 <- table(avg_post$ratio_signif)
-tb2
-
-
-db_row <- db_msr %>% filter(db_msr$patient_id == avg_2$patient_id[1]) 
-db_row
-
-avg_3
-
-  
-
-
-
-table(avg_start$ratio_signif)
-
-sum(is.na(avg_start$Unaffected))
-
-
-
-
-
-
-
-
-
-
-# old code 16.09.2026 - cleaning one patient
-# ad row id
-db_msr <- read.csv2(paste0(db.path, "nirs_measurements_clean_v2.csv"))
-
-db_msr <- db_msr %>% mutate(row_id = row_number())
-
-# all patients, only angiography_start_point == TRUE
-length(unique(db_msr$patient_id))
-
-id_true_first_try <- db_msr %>% group_by(patient_id) %>% 
-  filter(first_try_point == TRUE) %>% 
-  dplyr::select(patient_id)
-
-no_first_try <- (setdiff(as_vector(db_clin$patient_id), as_vector(id_true_first_try)))
-# which patients do not have angiography_start_point == TRUE
-# 29 patients do not have this flag!
-no_first_try
-
-db_msr %>% group_by(patient_id) %>% 
-  filter(recanalisation_point == TRUE) %>% summarise(n= n())
-
-# 2 patients do not have flag for recanalisation_point
-id_true <- db_msr %>% group_by(patient_id) %>% 
-  filter(recanalisation_point == TRUE)
-
-id_norecan <- setdiff(as_vector(db_clin$patient_id), as_vector(id_true))
-id_norecan
-
-# do 2 patients have 
-db_msr %>% filter(patient_id %in% id_norecan & first_try_point == TRUE) %>% 
-  dplyr::select(patient_id, datetime, first_try_point, recanalisation_point)
-
-# the patient 1001590120 has wrong year (2025 instead of 2015)
-# correct recan time is: 2015-10-22 12:15:00
-row_tochange <- db_msr %>% filter(patient_id == 1001590120 &
-                    datetime >= "2015-10-22 12:15:00"
-                  & datetime <= "2015-10-22 12:16:00") %>% 
-  slice_head(n=1) %>% dplyr::select(row_id)
-as.numeric(row_tochange)
-
-db_msr[db_msr$row_id == as.numeric(row_tochange),]$recanalisation_point <- TRUE
-
-# the patient 1001249114 has wrong date order
-row_tochange <- db_msr %>% filter(patient_id == 1001249114 &
-                                    datetime >= "2013-07-01 09:15:00"
-                                  & datetime <= "2013-07-01 09:16:00") %>% 
-  slice_head(n=1) %>% dplyr::select(row_id)
-as.numeric(row_tochange)
-
-db_msr[db_msr$row_id == as.numeric(row_tochange),]$recanalisation_point <- TRUE
-
-no_open <- db_clin %>% filter(opening_datetime == "") %>% dplyr::select(patient_id)
-no_open <- as_vector(no_open$patient_id)
-no_open
-# change 13 patients to no opening time!
-db_msr <- db_msr %>% mutate(
-  recanalisation_point = case_when(patient_id %in% no_open ~ FALSE, TRUE ~ recanalisation_point)
+# --- exclusions table label; set a LARGE font inside the HTML TABLE ---
+f_label <- paste0(
+  "<TABLE BORDER='0' CELLBORDER='0' CELLPADDING='8' BGCOLOR='White' FONTSIZE='28'>",
+  "<TR><TD ALIGN='LEFT' COLSPAN='2'><B>Exclusions: ", excl_total, "</B></TD></TR>",
+  f_rows,
+  "</TABLE>"
 )
 
+library(glue)
+graph_code <- glue("
+digraph flowchart {{
 
-# save new database
-write.csv2(db_msr, paste0(db.path, "nirs_measurements_clean_v2.csv"))
+  // 1) Orthogonal edges + bigger base fonts + more spacing
+  graph [layout=dot, rankdir=TB, fontname=\"Calibri\", fontsize=28,
+         splines=ortho, nodesep=0.6, ranksep=0.7];
+  node  [shape=rectangle, style=filled, fillcolor=White,
+         fontname=\"Calibri\", fontsize=28, margin=\"0.25,0.15\"];
+  edge  [fontname=\"Calibri\", fontsize=28, arrowsize=1.4];
+
+  // existing nodes
+  A [label=<
+      Total Patients<BR/><B>{flowChartData$total_patients}</B><BR/><FONT POINT-SIZE=\"18\">April 2010 to December 2023</FONT>
+  >];
+
+  B [label=<
+      Anterior occlusive stroke<BR/><B>{flowChartData$total_patients - flowChartData$non_anteriors}</B>
+  >];
+
+  C [label=<
+      Other vessels<BR/><B>{flowChartData$non_anteriors}</B>
+  >];
+
+  C2 [label=<
+      No NIRS measurements<BR/><B>{(flowChartData$total_patients - flowChartData$non_anteriors)-flowChartData$nirs_data}</B>
+  >];
+  
+  D [label=<
+      With NIRS data<BR/><B>{flowChartData$nirs_data}</B>
+  >];
+
+  // spacer/connector under D
+  E [shape=point, label=\"\", width=0];
+
+  // exclusions (HTML table already has FONTSIZE=28 inside)
+  F [shape=box, label=<{f_label}>, margin=\"0.18,0.18\"];
+
+  // merged
+  G [label=<Final cases to analyze<BR/><B>{merged_n}</B>>];
+
+  // ------- main stem -------
+  A -> blank1 [dir=none];
+  blank1 [shape=point, label=\"\", width=0];
+  blank1 -> C [minlen = 3];
+  {{ rank = same; blank1 C }}
+  
+  blank1 -> B;
+  
+  B -> blank2 [dir=none];
+  
+  blank2 [shape=point, label=\"\", width=0];
+  blank2 -> C2 [minlen = 3];
+  {{ rank = same; blank2 C2 }}
+  
+  blank2 -> D;
+  
+  // split to exclusions + merged
+  D -> E [dir=none];
+  {{ rank = same; E F }}
+  E -> F [constraint=false, minlen=3];
+  E -> G
+
+}}
+")
+
+DiagrammeR::grViz(graph_code, width = 1100, height = 900)
+
+library(DiagrammeR)
+library(DiagrammeRsvg)
+library(rsvg)
+
+#svg <- export_svg(grViz(DiagrammeR::grViz(graph_code, width = 1100, height = 900)))
+svg <- DiagrammeRsvg::export_svg(
+  DiagrammeR::grViz(graph_code)
+)
+# DiagrammeR::grViz(graph_code)
+# rsvg_png(
+#   charToRaw(svg),
+#   file = paste0(db.path,"Figure_1_flowchart.png"),
+#   width = 1100,
+#   height = 900
+# )
+
+library(DiagrammeR)
+library(DiagrammeRsvg)
+library(rsvg)
+library(magick)
+
+# Create graph
+g <- DiagrammeR::grViz(graph_code)
+
+# Export to SVG
+svg <- DiagrammeRsvg::export_svg(g)
+
+# Desired final size
+dpi <- 300
+width_in  <- 6
+height_in <- 5
+
+width_px  <- width_in  * dpi
+height_px <- height_in * dpi
+
+# Save PNG
+png_file <- paste0("G:/Meine Ablage/sci/graz/retrospective/NIRS EVT 2025/Manuscript/Submissions/jcbfm/", "Figure_1_flowchart.png")
+
+rsvg::rsvg_png(
+  charToRaw(svg),
+  file = png_file,
+  width = 1800,
+  height = 1500
+)
+
+# Optional but useful: write 300 dpi metadata into the PNG
+magick::image_write(img, path = png_file, format = "png")
+
+
+
+# DEMOGRAPHIC TABLE----
+# TABLE DEMOGRAPHICS MAIN TEXT----
+# Variables to describe
+library(dplyr)
+library(gtsummary)
+library(flextable)
+
+# ============================================================
+# Demographic / clinical Table 1
+# ============================================================
+
+var_desc <- c(
+  "alter", "geschlecht", "pre_mRS", "stroke_typ", "side", "zeitpunkt",
+  "hypertonus2", "hypercholesterinaemie", "diabetes",
+  "kardiovaskulaere_erkrankungen", "andere_risikofaktoren",
+  "periphere_avk", "nikotinabusus", "vorhofflimmern2",
+  "vorbehandlung_mit_thrombozytenfh",
+  "vorbehandlung_orale_antikoagulanzien",
+  "thrombozytenzahl_bei_aufnahme",
+  "serumglucose_bei_aufnahme", "crp", "haematokrit",
+  "iv_thrombolyse_mit_rtpa", "a_thrombolyse",
+  "anzahl_verwendeter_devices", "extrakranieller_stent",
+  "vessel_type_preangio",
+  "ipsilat_extrakran_hochgr_aci_stenose_verschluss",
+  "tici_grp", "nihss_bei_aufnahme_nur_summe",
+  "initiale_bildgebung", "infarktfruehzeichen",
+  "periprozedurale_dissektion_nicht_flussrel",
+  "periprozedurale_dissektion_flussrel",
+  "intrazerebrale_blutung", "sab",
+  "thrombembolische_komplikationen",
+  "reokklusion_des_zielgefaesses",
+  "komplikationen_an_punktionsstelle",
+  "ecass_code", "hemikraniektomie",
+  "final_infarct",
+  "stenose_im_therapierten_gefaess",
+  "schlaganfall_aetiologie_toast",
+  "nihss_entl_max",
+  "mt_duration",
+  "time_diff_onset_thrombectomy_time",
+  "time_diff_onset_lyse",
+  "mRS_3mo_grp",
+  "grp_coll_status"
+)
+
+var_labels <- c(
+  alter = "Age (years)",
+  geschlecht = "Sex",
+  pre_mRS = "Premorbid mRS",
+  stroke_typ = "Stroke onset type",
+  side = "Affected hemisphere",
+  zeitpunkt = "Time of admission",
+  hypertonus2 = "Hypertension",
+  hypercholesterinaemie = "Hypercholesterolemia",
+  diabetes = "Diabetes mellitus",
+  kardiovaskulaere_erkrankungen = "Cardiovascular disease",
+  andere_risikofaktoren = "Other vascular risk factors",
+  periphere_avk = "Peripheral arterial disease",
+  nikotinabusus = "Smoking",
+  vorhofflimmern2 = "Atrial fibrillation",
+  vorbehandlung_mit_thrombozytenfh = "Antiplatelet treatment prior to stroke",
+  vorbehandlung_orale_antikoagulanzien = "Oral anticoagulation prior to stroke",
+  thrombozytenzahl_bei_aufnahme = "Platelet count (G/L)",
+  serumglucose_bei_aufnahme = "Serum glucose (mg/dL)",
+  crp = "CRP (mg/dL)",
+  haematokrit = "Hematocrit (%)",
+  iv_thrombolyse_mit_rtpa = "Intravenous thrombolysis with alteplase",
+  a_thrombolyse = "Intra-arterial thrombolysis",
+  anzahl_verwendeter_devices = "Number of devices used",
+  extrakranieller_stent = "Extracranial stent implantation",
+  vessel_type_preangio = "Vessel occlusion",
+  ipsilat_extrakran_hochgr_aci_stenose_verschluss =
+    "Ipsilateral high-grade ICA stenosis or occlusion",
+  tici_grp = "Final mTICI",
+  nihss_bei_aufnahme_nur_summe = "NIHSS at admission",
+  initiale_bildgebung = "Initial brain imaging",
+  infarktfruehzeichen = "Early ischemic changes",
+  periprozedurale_dissektion_nicht_flussrel =
+    "Dissection, not hemodynamically relevant",
+  periprozedurale_dissektion_flussrel =
+    "Dissection, hemodynamically relevant",
+  intrazerebrale_blutung = "Intracerebral hemorrhage",
+  sab = "Subarachnoid hemorrhage",
+  thrombembolische_komplikationen = "Thromboembolic complications",
+  reokklusion_des_zielgefaesses = "Reocclusion of target vessel",
+  komplikationen_an_punktionsstelle = "Groin puncture complications",
+  ecass_code = "ECASS hemorrhage classification",
+  hemikraniektomie = "Hemicraniectomy",
+  final_infarct = "Final infarct size",
+  stenose_im_therapierten_gefaess = "Stenosis grade in target vessel",
+  schlaganfall_aetiologie_toast = "Stroke etiology (TOAST)",
+  nihss_entl_max = "NIHSS at discharge",
+  mt_duration = "Intervention duration (min)",
+  time_diff_onset_thrombectomy_time = "Onset to groin puncture (min)",
+  time_diff_onset_lyse = "Onset to intravenous thrombolysis (min)",
+  mRS_3mo_grp = "mRS at 3 months",
+  grp_coll_status = "Collateral status"
+)
+
+# ------------------------------------------------------------
+# Check which requested variables exist in db_clin
+# ------------------------------------------------------------
+
+vars_present <- intersect(var_desc, names(db_clin))
+vars_missing <- setdiff(var_desc, names(db_clin))
+
+cat(
+  "Variables not found in db_clin:\n",
+  paste(vars_missing, collapse = "\n"),
+  "\n\n"
+)
+
+# ------------------------------------------------------------
+# Variables to treat explicitly as continuous
+# ------------------------------------------------------------
+
+continuous_vars <- c(
+  "alter",
+  "nihss_bei_aufnahme_nur_summe",
+  "nihss_entl_max",
+  "thrombozytenzahl_bei_aufnahme",
+  "serumglucose_bei_aufnahme",
+  "crp",
+  "haematokrit",
+  "anzahl_verwendeter_devices",
+  "mt_duration",
+  "time_diff_onset_thrombectomy_time",
+  "time_diff_onset_lyse"
+)
+
+continuous_vars <- intersect(
+  continuous_vars,
+  vars_present
+)
+
+# ------------------------------------------------------------
+# Create Table 1
+# ------------------------------------------------------------
+
+
+tbl_demographic <- db_clin |>
+  dplyr::select(
+    dplyr::all_of(vars_present)
+  ) |>
+  gtsummary::tbl_summary(
+    type = list(
+      dplyr::all_of(continuous_vars) ~ "continuous"
+    ),
+    label = as.list(
+      var_labels[vars_present]
+    ),
+    statistic = list(
+      gtsummary::all_continuous() ~ "{median} ({p25}, {p75})",
+      gtsummary::all_categorical() ~ "{n} ({p}%)"
+    ),
+    digits = list(
+      gtsummary::all_continuous() ~ 1,
+      gtsummary::all_categorical() ~ c(0, 1)
+    ),
+    missing = "ifany",
+    missing_text = "Missing"
+  ) |>
+  gtsummary::modify_header(
+    label ~ "**Characteristic**",
+    stat_0 ~ "**N = {N}**"
+  ) |>
+  gtsummary::bold_labels()
+
+# ------------------------------------------------------------
+# Convert to flextable
+# ------------------------------------------------------------
+
+ft_demographic <- tbl_demographic |>
+  gtsummary::as_flex_table() |>
+  flextable::set_caption(
+    caption = paste0(
+      "Table 1. Demographic, clinical, imaging, and procedural ",
+      "characteristics of the study population."
+    )
+  ) |>
+  flextable::autofit()
+
+ft_demographic
+
+
+
+
+# TABLE 2----
+# Patient-level interhemispheric rSO2 asymmetry
+
+# Rename conceptually -- avoids "correct/incorrect" terminology
+n_aff_lower <- n_unaff_higher
+n_aff_higher_tbl <- n_aff_higher
+n_no_asym <- n_equal
+
+n_total <- n_aff_lower + n_aff_higher_tbl + n_no_asym
+n_relevant_asym <- n_aff_lower + n_aff_higher_tbl
+
+# Exact binomial 95% CI helper
+get_binom_ci <- function(x, n) {
+  ci <- stats::binom.test(x, n)$conf.int * 100
+  c(low = ci[1], high = ci[2])
+}
+
+ci_aff_lower <- get_binom_ci(n_aff_lower, n_total)
+ci_no_asym <- get_binom_ci(n_no_asym, n_total)
+ci_aff_higher <- get_binom_ci(n_aff_higher_tbl, n_total)
+ci_any_asym <- get_binom_ci(n_relevant_asym, n_total)
+
+# Direction among patients with relevant asymmetry
+ci_lower_among_asym <- get_binom_ci(
+  n_aff_lower,
+  n_relevant_asym
+)
+
+table2_df <- tibble::tibble(
+  `Interhemispheric pattern` = c(
+    "Affected hemisphere lower",
+    "No relevant asymmetry",
+    "Affected hemisphere higher",
+    "Any relevant asymmetry"
+  ),
+  
+  Definition = c(
+    "Affected − unaffected < −4 pp",
+    "|Affected − unaffected| ≤ 4 pp",
+    "Affected − unaffected > +4 pp",
+    "|Affected − unaffected| > 4 pp"
+  ),
+  
+  `n/N` = c(
+    sprintf("%d/%d", n_aff_lower, n_total),
+    sprintf("%d/%d", n_no_asym, n_total),
+    sprintf("%d/%d", n_aff_higher_tbl, n_total),
+    sprintf("%d/%d", n_relevant_asym, n_total)
+  ),
+  
+  `%` = c(
+    100 * n_aff_lower / n_total,
+    100 * n_no_asym / n_total,
+    100 * n_aff_higher_tbl / n_total,
+    100 * n_relevant_asym / n_total
+  ),
+  
+  `95% CI` = c(
+    sprintf("%.1f–%.1f", ci_aff_lower["low"], ci_aff_lower["high"]),
+    sprintf("%.1f–%.1f", ci_no_asym["low"], ci_no_asym["high"]),
+    sprintf("%.1f–%.1f", ci_aff_higher["low"], ci_aff_higher["high"]),
+    sprintf("%.1f–%.1f", ci_any_asym["low"], ci_any_asym["high"])
+  )
+)
+
+ft_table2 <- table2_df |>
+  flextable::flextable() |>
+  flextable::colformat_double(
+    j = "%",
+    digits = 1
+  ) |>
+  flextable::set_header_labels(
+    `Interhemispheric pattern` = "Interhemispheric pattern",
+    Definition = "Definition",
+    `n/N` = "n/N",
+    `%` = "%",
+    `95% CI` = "95% CI"
+  ) |>
+  flextable::bold(i = 4, bold = TRUE) |>
+  flextable::align(
+    j = c("n/N", "%", "95% CI"),
+    align = "center",
+    part = "all"
+  ) |>
+  flextable::add_footer_lines(
+    values = paste0(
+      "Among patients with a relevant asymmetry (>4 percentage points), ",
+      "rSO₂ was lower in the affected hemisphere in ",
+      n_aff_lower, "/", n_relevant_asym,
+      " (", sprintf("%.1f", 100 * n_aff_lower / n_relevant_asym), "%; ",
+      "95% CI ", sprintf("%.1f", ci_lower_among_asym["low"]), "–",
+      sprintf("%.1f", ci_lower_among_asym["high"]), "%). ",
+      "Direction of asymmetry is reported descriptively and should not be ",
+      "interpreted as correct versus incorrect lateralisation."
+    )
+  ) |>
+  flextable::set_caption(
+    caption = paste0(
+      "Table 2. Patient-level interhemispheric rSO₂ asymmetry at ",
+      "procedural baseline."
+    )
+  ) |>
+  flextable::autofit()
+
+ft_table2
+
+
+# TABLE 3----
+# Patient-level temporal rSO2 response
+
+# ------------------------------------------------------------
+# 1. Create one pre/post pair per patient and hemisphere
+# ------------------------------------------------------------
+
+prepost_wide <- plot_df |>
+  dplyr::select(
+    patient_id,
+    hemisphere,
+    period,
+    avg_10min_rSO2
+  ) |>
+  tidyr::pivot_wider(
+    names_from = period,
+    values_from = avg_10min_rSO2
+  ) |>
+  dplyr::filter(
+    !is.na(start),
+    !is.na(post)
+  ) |>
+  dplyr::mutate(
+    change = post - start
+  )
+
+# ------------------------------------------------------------
+# 2. Hemisphere-specific descriptive statistics
+# ------------------------------------------------------------
+
+hemi_summary <- prepost_wide |>
+  dplyr::group_by(hemisphere) |>
+  dplyr::summarise(
+    n = dplyr::n(),
+    
+    pre_median = median(start, na.rm = TRUE),
+    pre_q1 = quantile(start, 0.25, na.rm = TRUE),
+    pre_q3 = quantile(start, 0.75, na.rm = TRUE),
+    
+    post_median = median(post, na.rm = TRUE),
+    post_q1 = quantile(post, 0.25, na.rm = TRUE),
+    post_q3 = quantile(post, 0.75, na.rm = TRUE),
+    
+    change_median = median(change, na.rm = TRUE),
+    change_q1 = quantile(change, 0.25, na.rm = TRUE),
+    change_q3 = quantile(change, 0.75, na.rm = TRUE),
+    
+    .groups = "drop"
+  )
+
+# ------------------------------------------------------------
+# 3. Within-hemisphere Wilcoxon estimates
+#
+# Testing CHANGE = post - pre ensures:
+# positive estimate = increase after reperfusion
+# ------------------------------------------------------------
+
+get_wilcox_change <- function(x) {
+  
+  wt <- stats::wilcox.test(
+    x,
+    mu = 0,
+    conf.int = TRUE,
+    exact = FALSE
+  )
+  
+  tibble::tibble(
+    HL_estimate = unname(wt$estimate),
+    ci_low = wt$conf.int[1],
+    ci_high = wt$conf.int[2],
+    p_value = wt$p.value
+  )
+}
+
+hemi_tests <- prepost_wide |>
+  dplyr::group_by(hemisphere) |>
+  dplyr::group_modify(
+    ~ get_wilcox_change(.x$change)
+  ) |>
+  dplyr::ungroup()
+
+hemi_results <- hemi_summary |>
+  dplyr::left_join(
+    hemi_tests,
+    by = "hemisphere"
+  )
+
+# ------------------------------------------------------------
+# 4. Direct between-hemisphere comparison of change
+#
+# delta_delta =
+# (post - pre) affected - (post - pre) unaffected
+# ------------------------------------------------------------
+
+delta_df <- change_between_hemispheres |>
+  dplyr::select(
+    patient_id,
+    Affected,
+    Unaffected,
+    delta_delta
+  ) |>
+  dplyr::filter(
+    !is.na(Affected),
+    !is.na(Unaffected),
+    !is.na(delta_delta)
+  )
+
+delta_test <- stats::wilcox.test(
+  delta_df$delta_delta,
+  mu = 0,
+  conf.int = TRUE,
+  exact = FALSE
+)
+
+delta_summary <- tibble::tibble(
+  n = nrow(delta_df),
+  change_median = median(
+    delta_df$delta_delta,
+    na.rm = TRUE
+  ),
+  change_q1 = quantile(
+    delta_df$delta_delta,
+    0.25,
+    na.rm = TRUE
+  ),
+  change_q3 = quantile(
+    delta_df$delta_delta,
+    0.75,
+    na.rm = TRUE
+  ),
+  HL_estimate = unname(delta_test$estimate),
+  ci_low = delta_test$conf.int[1],
+  ci_high = delta_test$conf.int[2],
+  p_value = delta_test$p.value
+)
+
+# ------------------------------------------------------------
+# 5. Construct publication table
+# ------------------------------------------------------------
+
+format_med_iqr <- function(med, q1, q3) {
+  sprintf("%.1f [%.1f–%.1f]", med, q1, q3)
+}
+
+format_est_ci <- function(est, low, high) {
+  sprintf("%.1f (%.1f to %.1f)", est, low, high)
+}
+
+format_p <- function(p) {
+  ifelse(
+    p < 0.001,
+    "<0.001",
+    sprintf("%.3f", p)
+  )
+}
+
+table3_hemi <- hemi_results |>
+  dplyr::mutate(
+    Measure = as.character(hemisphere),
+    
+    `Pre-reperfusion rSO₂, %` =
+      format_med_iqr(
+        pre_median,
+        pre_q1,
+        pre_q3
+      ),
+    
+    `Post-reperfusion rSO₂, %` =
+      format_med_iqr(
+        post_median,
+        post_q1,
+        post_q3
+      ),
+    
+    `ΔrSO₂, pp` =
+      format_med_iqr(
+        change_median,
+        change_q1,
+        change_q3
+      ),
+    
+    `HL estimate (95% CI), pp` =
+      format_est_ci(
+        HL_estimate,
+        ci_low,
+        ci_high
+      ),
+    
+    `P value` =
+      format_p(p_value)
+  ) |>
+  dplyr::select(
+    Measure,
+    n,
+    `Pre-reperfusion rSO₂, %`,
+    `Post-reperfusion rSO₂, %`,
+    `ΔrSO₂, pp`,
+    `HL estimate (95% CI), pp`,
+    `P value`
+  )
+
+table3_delta <- tibble::tibble(
+  Measure = "Differential change (ΔΔrSO₂)",
+  n = delta_summary$n,
+  `Pre-reperfusion rSO₂, %` = "—",
+  `Post-reperfusion rSO₂, %` = "—",
+  `ΔrSO₂, pp` =
+    format_med_iqr(
+      delta_summary$change_median,
+      delta_summary$change_q1,
+      delta_summary$change_q3
+    ),
+  `HL estimate (95% CI), pp` =
+    format_est_ci(
+      delta_summary$HL_estimate,
+      delta_summary$ci_low,
+      delta_summary$ci_high
+    ),
+  `P value` =
+    format_p(delta_summary$p_value)
+)
+
+table3_df <- dplyr::bind_rows(
+  table3_hemi,
+  table3_delta
+)
+
+# ------------------------------------------------------------
+# 6. Flextable
+# ------------------------------------------------------------
+
+ft_table3 <- table3_df |>
+  flextable::flextable() |>
+  flextable::set_header_labels(
+    Measure = "Measure",
+    n = "n",
+    `Pre-reperfusion rSO₂, %` = "Pre-reperfusion rSO₂, %",
+    `Post-reperfusion rSO₂, %` = "Post-reperfusion rSO₂, %",
+    `ΔrSO₂, pp` = "Change ΔrSO₂, pp",
+    `HL estimate (95% CI), pp` = "HL estimate (95% CI), pp",
+    `P value` = "P value"
+  ) |>
+  flextable::bold(
+    i = 3,
+    bold = TRUE
+  ) |>
+  flextable::align(
+    j = 2:7,
+    align = "center",
+    part = "all"
+  ) |>
+  flextable::add_footer_lines(
+    values = paste0(
+      "Values are median [IQR]. ΔrSO₂ = post-reperfusion minus ",
+      "pre-reperfusion rSO₂. Differential change (ΔΔrSO₂) = ",
+      "(post − pre)affected − (post − pre)unaffected. ",
+      "Positive ΔΔrSO₂ values indicate a greater increase, or a smaller ",
+      "decrease, in the affected hemisphere relative to the unaffected ",
+      "hemisphere. HL = Hodges–Lehmann location-shift estimate; ",
+      "pp = percentage points."
+    )
+  ) |>
+  flextable::set_caption(
+    caption = paste0(
+      "Table 3. Patient-level rSO₂ changes around successful reperfusion ",
+      "and direct comparison of temporal changes between hemispheres."
+    )
+  ) |>
+  flextable::autofit()
+
+ft_table3
+
+
+
+
+
+
+
+
+# 
+# tb2 <- table(avg_post$ratio_signif)
+# tb2
+# 
+# 
+# db_row <- db_msr %>% filter(db_msr$patient_id == avg_2$patient_id[1]) 
+# db_row
+# 
+# avg_3
+# 
+#   
+# 
+# 
+# 
+# table(avg_start$ratio_signif)
+# 
+# sum(is.na(avg_start$Unaffected))
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# # old code 16.09.2026 - cleaning one patient
+# # ad row id
+# db_msr <- read.csv2(paste0(db.path, "nirs_measurements_clean_v2.csv"))
+# 
+# db_msr <- db_msr %>% mutate(row_id = row_number())
+# 
+# # all patients, only angiography_start_point == TRUE
+# length(unique(db_msr$patient_id))
+# 
+# id_true_first_try <- db_msr %>% group_by(patient_id) %>% 
+#   filter(first_try_point == TRUE) %>% 
+#   dplyr::select(patient_id)
+# 
+# no_first_try <- (setdiff(as_vector(db_clin$patient_id), as_vector(id_true_first_try)))
+# # which patients do not have angiography_start_point == TRUE
+# # 29 patients do not have this flag!
+# no_first_try
+# 
+# db_msr %>% group_by(patient_id) %>% 
+#   filter(recanalisation_point == TRUE) %>% summarise(n= n())
+# 
+# # 2 patients do not have flag for recanalisation_point
+# id_true <- db_msr %>% group_by(patient_id) %>% 
+#   filter(recanalisation_point == TRUE)
+# 
+# id_norecan <- setdiff(as_vector(db_clin$patient_id), as_vector(id_true))
+# id_norecan
+# 
+# # do 2 patients have 
+# db_msr %>% filter(patient_id %in% id_norecan & first_try_point == TRUE) %>% 
+#   dplyr::select(patient_id, datetime, first_try_point, recanalisation_point)
+# 
+# # the patient 1001590120 has wrong year (2025 instead of 2015)
+# # correct recan time is: 2015-10-22 12:15:00
+# row_tochange <- db_msr %>% filter(patient_id == 1001590120 &
+#                     datetime >= "2015-10-22 12:15:00"
+#                   & datetime <= "2015-10-22 12:16:00") %>% 
+#   slice_head(n=1) %>% dplyr::select(row_id)
+# as.numeric(row_tochange)
+# 
+# db_msr[db_msr$row_id == as.numeric(row_tochange),]$recanalisation_point <- TRUE
+# 
+# # the patient 1001249114 has wrong date order
+# row_tochange <- db_msr %>% filter(patient_id == 1001249114 &
+#                                     datetime >= "2013-07-01 09:15:00"
+#                                   & datetime <= "2013-07-01 09:16:00") %>% 
+#   slice_head(n=1) %>% dplyr::select(row_id)
+# as.numeric(row_tochange)
+# 
+# db_msr[db_msr$row_id == as.numeric(row_tochange),]$recanalisation_point <- TRUE
+# 
+# no_open <- db_clin %>% filter(opening_datetime == "") %>% dplyr::select(patient_id)
+# no_open <- as_vector(no_open$patient_id)
+# no_open
+# # change 13 patients to no opening time!
+# db_msr <- db_msr %>% mutate(
+#   recanalisation_point = case_when(patient_id %in% no_open ~ FALSE, TRUE ~ recanalisation_point)
+# )
+# 
+# 
+# # save new database
+# write.csv2(db_msr, paste0(db.path, "nirs_measurements_clean_v2.csv"))

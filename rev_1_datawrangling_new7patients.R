@@ -50,13 +50,19 @@ db.path_local <- paste0("C:/sci/rcode/nirs/")
 # DBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDBDB
 # LAST STABLE DB
 #db_clin <- read.csv2(paste0(db.path_local, "clinical_new_clean_v2.csv"))
-db_clin <- read.csv2(paste0(db.path_local, "clinical_nirs_23092026.csv"))
+db_clin <- read.csv2(paste0(db.path_local, "clinical_nirs_24092026_1.csv"))
 # load main database
 #db_msr <- read.csv2(paste0(db.path_local, "nirs_measurements_clean_v2.csv"))
-db_msr <- read.csv2(paste0(db.path_local, "nirs_23092026.csv"))
+db_msr <- read.csv2(paste0(db.path_local, "nirs_24092026.csv"))
 
 # load new 7 patients
 db_new <- readxl::read_xlsx("G:/Meine Ablage/sci/dbs/graz/nirs/nirs_addition_23092026.xlsx")
+
+# save new version
+
+write.csv2(db_clin, paste0(db.path_local, "clinical_nirs_24092026_4.csv"))
+write.csv2(db_msr, paste0(db.path_local, "nirs_24092026_1.csv"))
+
 
 # Reshape ------------------------------------------------------------
 # 0. Reshape Left/Right measurements to long format
@@ -421,10 +427,6 @@ orig_db <- orig_db |>
 #> setdiff(db_new$patient_id, intersect(orig_db$patient_id, db_new$patient_id))
 #[1] 1001887933 1001874454 1000299807
 
-# mt duration calculation
-mt_duration <- db_new_ready |> group_by(patient_id) |>  dplyr::select(patient_id, elapsed_seconds) |> 
-  summarise(mt_dura <- max(elapsed_seconds)/60)
-mt_duration
 
 # transfering 4 patients from orig_db to db_clin
 library(dplyr)
@@ -566,10 +568,6 @@ db_clin <- bind_rows(
   patients_to_add_clin
 )
 
-# save new version
-
-write.csv2(db_clin, paste0(db.path_local, "clinical_nirs_23092026.csv"))
-write.csv2(db_msr_combined, paste0(db.path_local, "nirs_23092026.csv"))
 
 
 # futher with new loaded db_msr and db_clin
@@ -649,21 +647,481 @@ db_clin <- db_clin |>
           )
         ),
       TRUE ~ time_diff_onset_lyse
-    )
+    ),
+    time_diff_lyse_angio = case_when(
+      patient_id %in% ids_to_add &
+        !is.na(lyse_time) &
+        !is.na(thrombectomy_time_dt) ~
+        as.numeric(
+          difftime(
+            thrombectomy_time_dt,
+            lyse_time,
+            units = "mins"
+          )
+        ),
+      TRUE ~ time_diff_onset_lyse
+    ),
   ) |>
   dplyr::select(
-    -lyse_time
     -onset_time_dt,
     -thrombectomy_time_dt,
     -lyse_date_tmp,
     -lyse_clock_tmp
   )
-db_clin$time_diff_onset_lyse <- time_interval_var(db_clin, "datum_ereignisbeginn", "uhrzeit_ereignisbeginn", "datum_lysebeginn", "uhrzeit_lysebeginn")
+
 
 # display
 db_clin |> filter(patient_id %in% ids_to_add) |> 
-  dplyr::select(patient_id, stroke_typ, onset_time, thrombectomy_time, time_diff_onset_thrombectomy_time)
+  dplyr::select(patient_id, stroke_typ, onset_time, thrombectomy_time, 
+                lyse_time, time_diff_lyse_angio, first_try_datetime, opening_datetime)
 
 db_clin |> filter(patient_id %in% ids_to_add) |> 
   dplyr::select(patient_id, stroke_typ, onset_time, datum_lysebeginn, 
                 uhrzeit_lysebeginn, lyse_time, time_diff_onset_lyse)
+
+db_clin |> filter(patient_id %in% ids_to_add) |> 
+  dplyr::select(patient_id, tici_grp, stroke_typ, mt_duration)
+
+# mt duration calculation
+mt_duration <- db_new_ready |> group_by(patient_id) |>  
+  filter(patient_id %in% ids_to_add) |> 
+  dplyr::select(patient_id, elapsed_seconds) |> 
+  summarise(mt_dura <- max(elapsed_seconds)/60)
+mt_duration
+
+# put mt_duration in the database
+idx <- match(db_clin$patient_id, mt_duration$patient_id)
+
+db_clin$mt_duration[!is.na(idx)] <-
+  mt_duration[[2]][idx[!is.na(idx)]]
+
+# so to do 24.09. is
+# extract angio data from the console for all 7 patients
+# put this data into database db_msr
+# calculate differences
+# run the statistics again
+
+# AFFECTED HEMISPHERE DESIGNATION!!! for new 7
+
+ids_to_fix <- c(
+  1001887933,
+  1001874454,
+  1000299807,
+  1001745103,
+  1001906278,
+  1001895711,
+  1000639656
+)
+
+# ------------------------------------------------------------
+# 1. Correct datetime for two patients
+# 2. Assign Affected / Unaffected from db_clin$side
+# ------------------------------------------------------------
+
+# first get stroke side for the 7 patients
+side_lookup <- db_clin |>
+  filter(patient_id %in% ids_to_fix) |>
+  dplyr::select(patient_id, side) |>
+  distinct(patient_id, .keep_all = TRUE)
+
+db_msr_combined <- db_msr_combined |>
+  
+  # temporarily parse datetime
+  mutate(
+    datetime_tmp = as.POSIXct(
+      datetime,
+      format = "%d.%m.%Y %H:%M:%S",
+      tz = "Europe/Vienna"
+    ),
+    
+    # shift exactly +/- 1 hour
+    datetime_tmp = case_when(
+      patient_id == 1001906278 ~ datetime_tmp + 3600,
+      patient_id == 1000299807 ~ datetime_tmp - 3600,
+      TRUE ~ datetime_tmp
+    )
+  ) |>
+  
+  # add clinical stroke side
+  left_join(
+    side_lookup,
+    by = "patient_id"
+  ) |>
+  
+  mutate(
+    hemisphere_status = case_when(
+      
+      # only modify the 7 new patients
+      patient_id %in% ids_to_fix &
+        !is.na(side) &
+        !is.na(hemisphere_side) &
+        tolower(side) == tolower(hemisphere_side) ~
+        "Affected",
+      
+      patient_id %in% ids_to_fix &
+        !is.na(side) &
+        !is.na(hemisphere_side) &
+        tolower(side) != tolower(hemisphere_side) ~
+        "Unaffected",
+      
+      # keep existing values for everyone else
+      TRUE ~ hemisphere_status
+    ),
+    
+    # return datetime to original character format
+    datetime = format(
+      datetime_tmp,
+      "%d.%m.%Y %H:%M:%S"
+    )
+  ) |>
+  
+  dplyr::select(
+    -datetime_tmp,
+    -side
+  )
+
+library(dplyr)
+library(lubridate)
+
+ids_to_fix <- c(
+  1001887933,
+  1001874454,
+  1000299807,
+  1001745103,
+  1001906278,
+  1001895711,
+  1000639656
+)
+
+# ------------------------------------------------------------
+# Clinical event times
+# ------------------------------------------------------------
+
+event_lookup <- db_clin |>
+  filter(patient_id %in% ids_to_fix) |>
+  dplyr::select(
+    patient_id,
+    first_try_datetime,
+    opening_datetime
+  ) |>
+  distinct(patient_id, .keep_all = TRUE) |>
+  mutate(
+    first_try_minute = floor_date(
+      as.POSIXct(
+        first_try_datetime,
+        format = "%d.%m.%Y %H:%M",
+        tz = "Europe/Vienna"
+      ),
+      unit = "minute"
+    ),
+    
+    opening_minute = floor_date(
+      as.POSIXct(
+        opening_datetime,
+        format = "%d.%m.%Y %H:%M",
+        tz = "Europe/Vienna"
+      ),
+      unit = "minute"
+    )
+  ) |>
+  dplyr::select(
+    patient_id,
+    first_try_minute,
+    opening_minute
+  )
+
+db_msr_combined <- db_msr_combined |>
+  mutate(
+    datetime_dt = as.POSIXct(
+      datetime,
+      format = "%d.%m.%Y %H:%M:%S",
+      tz = "Europe/Vienna"
+    ),
+    
+    datetime_minute = floor_date(
+      datetime_dt,
+      unit = "minute"
+    )
+  ) |>
+  
+  left_join(
+    event_lookup,
+    by = "patient_id"
+  ) |>
+  
+  group_by(patient_id) |>
+  
+  mutate(
+    # --------------------------------------------------------
+    # Find first actual NIRS timestamp within first-try minute
+    # --------------------------------------------------------
+    first_try_first_time = if (
+      any(
+        !is.na(first_try_minute) &
+        datetime_minute == first_try_minute
+      )
+    ) {
+      min(
+        datetime_dt[
+          !is.na(first_try_minute) &
+            datetime_minute == first_try_minute
+        ],
+        na.rm = TRUE
+      )
+    } else {
+      as.POSIXct(NA)
+    },
+    
+    # --------------------------------------------------------
+    # Find first actual NIRS timestamp within opening minute
+    # --------------------------------------------------------
+    opening_first_time = if (
+      any(
+        !is.na(opening_minute) &
+        datetime_minute == opening_minute
+      )
+    ) {
+      min(
+        datetime_dt[
+          !is.na(opening_minute) &
+            datetime_minute == opening_minute
+        ],
+        na.rm = TRUE
+      )
+    } else {
+      as.POSIXct(NA)
+    },
+    
+    # --------------------------------------------------------
+    # Flag BOTH hemispheres at that timestamp
+    # --------------------------------------------------------
+    first_try_point = case_when(
+      patient_id %in% ids_to_fix &
+        !is.na(first_try_first_time) &
+        datetime_dt == first_try_first_time ~ TRUE,
+      
+      patient_id %in% ids_to_fix ~ FALSE,
+      
+      TRUE ~ first_try_point
+    ),
+    
+    recanalisation_point = case_when(
+      patient_id %in% ids_to_fix &
+        !is.na(opening_first_time) &
+        datetime_dt == opening_first_time ~ TRUE,
+      
+      patient_id %in% ids_to_fix ~ FALSE,
+      
+      TRUE ~ recanalisation_point
+    )
+  ) |>
+  
+  ungroup() |>
+  
+  dplyr::select(
+    -datetime_dt,
+    -datetime_minute,
+    -first_try_minute,
+    -opening_minute,
+    -first_try_first_time,
+    -opening_first_time
+  )
+
+db_msr_combined |>
+  filter(
+    patient_id %in% ids_to_fix,
+    first_try_point | recanalisation_point
+  ) |>
+  dplyr::select(
+    patient_id,
+    datetime,
+    hemisphere_side,
+    hemisphere_status,
+    first_try_point,
+    recanalisation_point
+  ) |>
+  arrange(
+    patient_id,
+    datetime,
+    hemisphere_side
+  )
+
+ids_to_fix <- c(
+  1001887933,
+  1001874454,
+  1000299807,
+  1001745103,
+  1001906278,
+  1001895711,
+  1000639656
+)
+
+db_msr <- db_msr |>
+  dplyr::mutate(
+    first_try_point = dplyr::case_when(
+      patient_id %in% ids_to_fix &
+        hemisphere_status == "Unaffected" ~ FALSE,
+      TRUE ~ first_try_point
+    ),
+    
+    recanalisation_point = dplyr::case_when(
+      patient_id %in% ids_to_fix &
+        hemisphere_status == "Unaffected" ~ FALSE,
+      TRUE ~ recanalisation_point
+    )
+  )
+
+# adding missing variables
+db_clin_old <- read.csv2(paste0(db.path_local, "clinical_170_clean_v1.csv"))
+db_clin_old <- read.csv2(paste0(db.path_local, "db_total_cleaned_11022026.csv2"))
+
+db_clin_old <- read.csv2(
+"db_total_cleaned_11022026.csv2",
+header = TRUE,
+sep = "\t",
+dec = ",",
+stringsAsFactors = FALSE,
+check.names = FALSE
+)
+
+vars_to_add <- c(
+  "vorbehandlung_mit_thrombozytenfh",
+  "vorbehandlung_orale_antikoagulanzien",
+  "nihss_entl_max"
+)
+
+lookup_old <- db_clin_old |>
+  dplyr::select(
+    patient_id,
+    dplyr::all_of(vars_to_add)
+  ) |>
+  dplyr::distinct(patient_id, .keep_all = TRUE)
+
+db_clin <- db_clin |>
+  dplyr::left_join(
+    lookup_old,
+    by = "patient_id"
+  )
+
+db_clin <- db_clin |>
+  dplyr::mutate(
+    
+    # --------------------------------------------------------
+    # Time of admission
+    # --------------------------------------------------------
+    zeitpunkt = dplyr::case_when(
+      zeitpunkt == "Standard duty hours (Moâ€“Fr 7:00â€“15:00)" ~
+        "Standard duty hours (Mo–Fr 7:00–15:00)",
+      TRUE ~ zeitpunkt
+    ),
+    
+    # --------------------------------------------------------
+    # Final infarct
+    # --------------------------------------------------------
+    final_infarct = dplyr::case_when(
+      final_infarct %in% c("0â€“33%", "0–33%", "0-33%") ~ "0–33%",
+      final_infarct %in% c("34â€“66%", "34–66%", "34-66%") ~ "34–66%",
+      final_infarct %in% c("67â€“100%", "67–100%", "67-100%") ~ "67–100%",
+      TRUE ~ final_infarct
+    ),
+    
+    # --------------------------------------------------------
+    # Stenosis in treated vessel
+    # --------------------------------------------------------
+    stenose_im_therapierten_gefaess = dplyr::case_when(
+      stenose_im_therapierten_gefaess ==
+        "Mildâ€“moderate stenosis" ~
+        "Mild–moderate stenosis",
+      TRUE ~ stenose_im_therapierten_gefaess
+    ),
+    
+    # --------------------------------------------------------
+    # 3-month mRS
+    # --------------------------------------------------------
+    mRS_3mo_grp = dplyr::case_when(
+      mRS_3mo_grp %in% c("0â€“2", "0–2", "0-2") ~ "0–2",
+      mRS_3mo_grp %in% c("3â€“6", "3–6", "3-6") ~ "3–6",
+      TRUE ~ mRS_3mo_grp
+    )
+  )
+
+db_clin |>
+  dplyr::select(
+    zeitpunkt,
+    final_infarct,
+    stenose_im_therapierten_gefaess,
+    mRS_3mo_grp
+  ) |>
+  lapply(unique)
+
+db_clin <- db_clin |>
+  dplyr::mutate(
+    stenose_im_therapierten_gefaess = dplyr::case_when(
+      stenose_im_therapierten_gefaess == "0 = Keine Stenose" ~ "No stenosis",
+      TRUE ~ stenose_im_therapierten_gefaess
+    )
+  )
+
+db_clin$vessel_type_preangio[,db$clin$patient_id==1001887933 | patient_id == 1000299807] <- "M1"
+
+idx <- match(db_clin$patient_id, c("1001887933", "1000299807"))
+
+db_clin$vessel_type_preangio[!is.na(idx)] <- "M1"
+  
+idx <- match(db_clin$patient_id, c("1001887933"))
+db_clin$final_infarct[!is.na(idx)] <- "0–33%"
+
+db_clin <- db_clin |> mutate(
+  geschlecht = case_when(
+    geschlecht == "männlich" ~ "men",
+    geschlecht == "weiblich" ~ "women",
+    TRUE~geschlecht
+  )
+)
+
+db_clin <- db_clin |> mutate(
+  infarktfruehzeichen = case_when(
+    infarktfruehzeichen == "Ja, aber  < 1/3 ACM"~ "Less than 1/3 of MCA",
+    infarktfruehzeichen == "Nein" ~ "No",
+    TRUE ~ infarktfruehzeichen
+  )  
+)
+
+table(db_clin$stenose_im_therapierten_gefaess)
+
+db_clin <- db_clin |> mutate(
+  stenose_im_therapierten_gefaess = case_when(
+    stenose_im_therapierten_gefaess=="" ~ "Unknown",
+    TRUE ~ stenose_im_therapierten_gefaess
+  )
+)
+
+db_clin <- db_clin |>
+  dplyr::mutate(
+    schlaganfall_aetiologie_toast = dplyr::case_when(
+      
+      schlaganfall_aetiologie_toast %in% c(
+        "CE - Cardioembolic",
+        "Kardioembolisch"
+      ) ~ "CE - Cardioembolic",
+      
+      schlaganfall_aetiologie_toast ==
+        "LAA - Atherothrombotic" ~ "LAA - Atherothrombotic",
+      
+      schlaganfall_aetiologie_toast ==
+        "Other causes" ~ "Other causes",
+      
+      schlaganfall_aetiologie_toast %in% c(
+        "Unbek. Ursache (Diagnostik nicht komplett)",
+        "Unclassified",
+        "unknown",
+        "Unknown etiology"
+      ) ~ "Unknown etiology",
+      
+      TRUE ~ schlaganfall_aetiologie_toast
+    )
+  )
+
+table(db_t$schlaganfall_aetiologie_toast)
+
+table(db_t$stenose_im_therapierten_gefaess)

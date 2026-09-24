@@ -136,6 +136,22 @@ Results were similar when the direction of baseline interhemispheric asymmetry w
 
 Among patients with successful reperfusion, overall rSO₂ was not independently associated with favorable outcome (OR 0.97 per 1-percentage-point increase, 95% CI 0.92–1.02; p=0.269). A greater relative increase in rSO₂ in the affected compared with the unaffected hemisphere, quantified as the within-patient differential change [(post–pre)affected − (post–pre)unaffected], was associated with higher estimated odds of favorable outcome (OR 1.07 per 1-percentage-point increase, 95% CI 1.00–1.16), although this association did not reach conventional statistical significance (p=0.057). (Supplementary Table X_1).
 
+
+
+```{r demographic_table, echo=FALSE}
+ft_demographic
+```
+
+```{r table2, echo=FALSE}
+ft_table2
+```
+
+```{r table3, echo=FALSE}
+ft_table3
+```
+
+
+
 ```{r suppl_table_x_1, echo=FALSE}
 ft_multivariable
 ```
